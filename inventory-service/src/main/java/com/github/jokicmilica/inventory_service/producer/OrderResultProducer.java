@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
-
+import com.github.jokicmilica.exception.KafkaProducerException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -27,10 +27,10 @@ public class OrderResultProducer {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Interrupted while sending order result, orderId: {}", orderId, e);
-            throw new RuntimeException("Interrupted while sending order result", e);
+            throw new KafkaProducerException("Interrupted while sending order result");
         } catch (ExecutionException | TimeoutException e) {
             log.error("Failed to send order result, orderId: {}", orderId, e);
-            throw new RuntimeException("Failed to send order result", e);
+            throw new KafkaProducerException("Failed to send order result");
         }
     }
 }

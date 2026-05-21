@@ -30,7 +30,16 @@
           }
         },
         {
-          "name": "3. Check order status (wait 2-3s, expect PROCESSED)",
+          "name": "3. Check order status (expect PROCESSED)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["setTimeout(function(){}, 3000);"],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "http://localhost:8080/orders/order-001/status",
@@ -114,7 +123,16 @@
           }
         },
         {
-          "name": "3. Check order status (wait 2-3s, expect REJECTED)",
+          "name": "3. Check order status (expect REJECTED)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["setTimeout(function(){}, 3000);"],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "http://localhost:8080/orders/order-003/status",
@@ -140,7 +158,16 @@
           }
         },
         {
-          "name": "2. Check order status (wait 2-3s, expect REJECTED)",
+          "name": "2. Check order status (expect REJECTED)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["setTimeout(function(){}, 3000);"],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "http://localhost:8080/orders/order-004/status",
@@ -166,7 +193,16 @@
           }
         },
         {
-          "name": "2. Check order status (wait 2-3s, expect PROCESSED)",
+          "name": "2. Check order status (expect PROCESSED)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": ["setTimeout(function(){}, 3000);"],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "http://localhost:8080/orders/order-005/status",

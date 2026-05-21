@@ -52,7 +52,7 @@ GET /orders/{orderId}/status
 ### Order Service (port 8080)
 
 - `POST /orders` validates and publishes order event to Kafka
-- `GET /orders/{orderId}/status` returns current order processing status
+- `GET /orders/{orderId}/status` returns current order processing status and processing message/reason
 - Idempotency check using `ConcurrentHashMap.putIfAbsent()` (atomic, race-condition safe)
 - Rollback on Kafka publish failure, order ID is released so the client can retry
 - Consumes `order-results` topic to track inventory processing outcomes
@@ -186,8 +186,6 @@ Open `http/api-tests.http` in IntelliJ IDEA and run requests individually using 
 | UC4 | Item not found | `202` → status `REJECTED` |
 | UC5 | Duplicate orderId | `409 Conflict` — blocked by Order Service |
 | UC6 | Order not found | `404` — orderId never submitted |
-
-> **Note:** For UC1, UC3, UC4 — wait 2-3 seconds after `POST /orders` before checking status, as processing is asynchronous.
 
 ### Manual test: Kafka unavailable (503)
 

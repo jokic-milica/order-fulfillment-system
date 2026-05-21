@@ -35,8 +35,10 @@ public class InventoryService {
             OrderEvent previous = processedOrders.get(event.orderId());
             if (!previous.equals(event)) {
                 log.warn("Order ID reused with different parameters, orderId: {}", event.orderId());
-                orderResultProducer.send(event.orderId(), OrderStatus.REJECTED,
-                        "Order ID already used with different parameters");
+                try {
+                    orderResultProducer.send(event.orderId(), OrderStatus.REJECTED,
+                            "Order ID already used with different parameters");
+                } catch (Exception ignored) {}
                 return;
             }
             log.warn("Duplicate order detected, skipping orderId: {}", event.orderId());
@@ -45,7 +47,10 @@ public class InventoryService {
 
         if (!inventory.containsKey(event.itemId())) {
             log.warn("Item not found: {}", event.itemId());
-            orderResultProducer.send(event.orderId(), OrderStatus.REJECTED, "Item not found: " + event.itemId());
+            try {
+                orderResultProducer.send(event.orderId(), OrderStatus.REJECTED,
+                        String.format("Item not found: %s", event.itemId()));
+            } catch (Exception ignored) {}
             return;
         }
 
@@ -55,11 +60,18 @@ public class InventoryService {
             processedOrders.put(event.orderId(), event);
             log.info("Order processed, orderId: {}, itemId: {}, remaining stock: {}",
                     event.orderId(), event.itemId(), inventory.get(event.itemId()));
-            orderResultProducer.send(event.orderId(), OrderStatus.PROCESSED, "Order successfully processed, stock reserved");
+            try {
+                orderResultProducer.send(event.orderId(), OrderStatus.PROCESSED,
+                        String.format("Order with id %s successfully processed, stock reserved", event.orderId()));
+            } catch (Exception ignored) {}
         } else {
             log.warn("Insufficient stock, orderId: {}, itemId: {}, requested: {}, available: {}",
                     event.orderId(), event.itemId(), event.quantity(), inventory.get(event.itemId()));
-            orderResultProducer.send(event.orderId(), OrderStatus.REJECTED, "Insufficient stock for itemId: " + event.itemId());
+            try {
+                orderResultProducer.send(event.orderId(), OrderStatus.REJECTED,
+                        String.format("Insufficient stock for itemId: %s, requested: %d, available: %d",
+                                event.itemId(), event.quantity(), inventory.get(event.itemId())));
+            } catch (Exception ignored) {}
         }
     }
 

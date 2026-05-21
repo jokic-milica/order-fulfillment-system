@@ -32,18 +32,18 @@ public class OrderController {
         orderProducer.send(request);
         return ResponseEntity
                 .accepted()
-                .body(new OrderResponse(request.orderId(), "ACCEPTED", "Order received and queued for processing"));
+                .body(new OrderResponse(request.orderId(), "ACCEPTED", String.format("Order with id %s received and queued for processing", request.orderId())));
     }
 
-    @Operation(summary = "Get order status", description = "Returns current processing status of an order")
+    @Operation(summary = "Get order status", description = "Returns current processing status and reason for the order")
     @ApiResponse(responseCode = "200", description = "Status retrieved successfully")
     @ApiResponse(responseCode = "404", description = "Order not found")
     @GetMapping("/{orderId}/status")
     public ResponseEntity<OrderResponse> getOrderStatus(@PathVariable String orderId) {
-        return orderStatusService.getStatus(orderId)
-                .map(status -> ResponseEntity.ok()
-                        .body(new OrderResponse(orderId, status.name(), "Order status retrieved successfully")))
+        return orderStatusService.getOrderResult(orderId)
+                .map(result -> ResponseEntity.ok()
+                        .body(new OrderResponse(orderId, result.status().name(), result.message())))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new OrderResponse(orderId, "NOT_FOUND", "Order not found")));
+                        .body(new OrderResponse(orderId, "NOT_FOUND", String.format("Order with id %s not found", orderId))));
     }
 }

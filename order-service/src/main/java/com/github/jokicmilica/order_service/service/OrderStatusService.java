@@ -1,5 +1,6 @@
 package com.github.jokicmilica.order_service.service;
 
+import com.github.jokicmilica.model.OrderResult;
 import com.github.jokicmilica.model.OrderStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,22 +13,22 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class OrderStatusService {
 
-    private final Map<String, OrderStatus> orderStatusMap = new ConcurrentHashMap<>();
+    private final Map<String, OrderResult> orderResultMap = new ConcurrentHashMap<>();
 
-    public void updateStatus(String orderId, OrderStatus status) {
-        orderStatusMap.put(orderId, status);
-        log.info("Order status updated, orderId: {}, status: {}", orderId, status);
+    public void updateOrderResult(OrderResult result) {
+        orderResultMap.put(result.orderId(), result);
+        log.info("Order status updated, orderId: {}, status: {}, message: {}", result.orderId(), result.status(), result.message());
     }
-
-    public Optional<OrderStatus> getStatus(String orderId) {
-        return Optional.ofNullable(orderStatusMap.get(orderId));
-    }
-
     public boolean reserveIfAbsent(String orderId, OrderStatus status) {
-        return orderStatusMap.putIfAbsent(orderId, status) == null;
+        OrderResult pending = new OrderResult(orderId, status, String.format("Order with id %s received and queued for processing", orderId));
+        return orderResultMap.putIfAbsent(orderId, pending) == null;
     }
 
-    public void removeStatus(String orderId) {
-        orderStatusMap.remove(orderId);
+    public Optional<OrderResult> getOrderResult(String orderId) {
+        return Optional.ofNullable(orderResultMap.get(orderId));
+    }
+
+    public void removeOrderResult(String orderId) {
+        orderResultMap.remove(orderId);
     }
 }

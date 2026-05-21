@@ -34,8 +34,9 @@ public class InventoryConsumer {
     }
 
     @DltHandler
-    public void handleDlt(OrderEvent event) {
-        log.error("Order failed all retries, orderId: {}", event.orderId());
-        orderResultProducer.send(event.orderId(), OrderStatus.FAILED, "Order failed after all retry attempts");
+    public void handleDlt(OrderEvent event, Throwable exception) {
+        log.error("Order failed all retries, orderId: {}, reason: {}", event.orderId(), exception.getMessage(), exception);
+        orderResultProducer.send(event.orderId(), OrderStatus.FAILED,
+                String.format("Order failed after all retry attempts: %s", exception.getMessage()));
     }
 }

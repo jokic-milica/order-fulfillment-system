@@ -18,6 +18,6 @@ public class OrderResultConsumer {
     @KafkaListener(topics = KafkaTopics.ORDER_RESULTS, groupId = "order-service-group")
     public void consume(OrderResult result) {
         log.info("Received order result for orderId: {}, status: {}", result.orderId(), result.status());
-        orderStatusService.updateStatus(result.orderId(), result.status());
+        orderStatusService.updateOrderResult(result);
     }
 }
