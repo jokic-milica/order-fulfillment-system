@@ -1,0 +1,169 @@
+### ============================
+### SETUP: Check initial inventory
+### ============================
+
+### Get current inventory state (item-1: 100, item-2: 50, item-3: 0)
+GET http://localhost:8081/inventory
+Accept: application/json
+
+### ============================
+### UC1 - Happy Path (Successful Order)
+### ============================
+
+### 1. Place order - sufficient stock (expect 202)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-001",
+  "itemId": "item-1",
+  "quantity": 10
+}
+
+###
+
+### 2. Check order status (wait 2-3s, expect PROCESSED)
+GET http://localhost:8080/orders/order-001/status
+Accept: application/json
+
+###
+
+### 3. Verify inventory reduced (item-1 should be 90)
+GET http://localhost:8081/inventory
+Accept: application/json
+
+### ============================
+### UC2 - Invalid Payload (Validation)
+### ============================
+
+### 1. Empty orderId (expect 400)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "",
+  "itemId": "item-1",
+  "quantity": 10
+}
+
+###
+
+### 2. Negative quantity (expect 400)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-002",
+  "itemId": "item-1",
+  "quantity": -1
+}
+
+###
+
+### 3. Empty itemId (expect 400)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-002",
+  "itemId": "",
+  "quantity": 10
+}
+
+### ============================
+### UC3 - Insufficient Stock
+### ============================
+
+### 1. Place order - item-3 has 0 stock (expect 202)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-003",
+  "itemId": "item-3",
+  "quantity": 1
+}
+
+###
+
+### 2. Check order status (wait 2-3s, expect REJECTED)
+GET http://localhost:8080/orders/order-003/status
+Accept: application/json
+
+### ============================
+### UC4 - Item Not Found
+### ============================
+
+### 1. Place order - item-999 does not exist (expect 202)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-004",
+  "itemId": "item-999",
+  "quantity": 1
+}
+
+###
+
+### 2. Check order status (wait 2-3s, expect REJECTED)
+GET http://localhost:8080/orders/order-004/status
+Accept: application/json
+
+### ============================
+### UC5 - Idempotency (Duplicate Order)
+### ============================
+
+### 1. Place original order (expect 202)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-005",
+  "itemId": "item-2",
+  "quantity": 5
+}
+
+###
+
+### 2. Check order status (wait 2-3s, expect PROCESSED)
+GET http://localhost:8080/orders/order-005/status
+Accept: application/json
+
+###
+
+### 3. Resend same orderId - identical params (expect 409 - duplicate order)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-005",
+  "itemId": "item-2",
+  "quantity": 5
+}
+
+###
+
+### 4. Resend same orderId - different params (expect 409 - duplicate order)
+POST http://localhost:8080/orders
+Content-Type: application/json
+
+{
+  "orderId": "order-005",
+  "itemId": "item-2",
+  "quantity": 999
+}
+
+###
+
+### 5. Check order status (expect PROCESSED - status unchanged)
+GET http://localhost:8080/orders/order-005/status
+Accept: application/json
+
+### ============================
+### UC6 - Order Not Found
+### ============================
+
+### 1. Check status - non existent order (expect 404)
+GET http://localhost:8080/orders/order-999/status
+Accept: application/json

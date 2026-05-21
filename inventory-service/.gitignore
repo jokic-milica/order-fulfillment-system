@@ -1,4 +1,5 @@
 HELP.md
+logs/
 target/
 mvnw
 mvnw.cmd
@@ -33,3 +34,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### log files ###
+logs/

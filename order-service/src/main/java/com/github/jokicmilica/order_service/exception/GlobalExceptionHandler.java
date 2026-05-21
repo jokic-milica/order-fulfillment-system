@@ -1,6 +1,5 @@
 package com.github.jokicmilica.order_service.exception;
 
-import com.github.jokicmilica.order_service.model.OrderResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +25,14 @@ public class GlobalExceptionHandler {
                         "Unable to process order, please try again later",
                         ex.getMessage()
                 ));
+    }
+
+    @ExceptionHandler(DuplicateOrderException.class)
+    public ResponseEntity<ErrorMessage> handleDuplicateOrder(DuplicateOrderException ex) {
+        log.warn("Duplicate order: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(new ErrorMessage(409, Instant.now(), "Duplicate order", ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

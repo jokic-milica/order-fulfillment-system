@@ -12,10 +12,32 @@ spring:
         retry.backoff.ms: 1000
         enable.idempotence: true
         spring.json.add.type.headers: true
+    consumer:
+      group-id: order-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: com.github.jokicmilica.model.OrderResult
 
 server:
   port: 8080
 
-kafka:
-  topic:
-    orders: orders
+logging:
+  file:
+    name: logs/order-service.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    root: INFO
+    com.github.jokicmilica: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  health:
+    kafka:
+      enabled: true

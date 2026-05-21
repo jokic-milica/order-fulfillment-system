@@ -2,8 +2,13 @@ package com.github.jokicmilica.order_service;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ComponentScan;
 
 @SpringBootApplication
+@ComponentScan(basePackages = {
+    "com.github.jokicmilica.order_service",
+    "com.github.jokicmilica.config"
+})
 public class OrderServiceApplication {
 
 	public static void main(String[] args) {

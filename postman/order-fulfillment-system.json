@@ -1,0 +1,225 @@
+{
+  "info": {
+    "name": "Order Fulfillment System",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Test collection organized by use cases. Run each folder in order, or use 'Run Collection' for automated execution."
+  },
+  "item": [
+    {
+      "name": "UC1 - Happy Path (Successful Order)",
+      "description": "Check inventory, place a valid order, verify it gets processed successfully",
+      "item": [
+        {
+          "name": "1. Get initial inventory state",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8081/inventory",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        },
+        {
+          "name": "2. Place order - sufficient stock",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-001\",\n  \"itemId\": \"item-1\",\n  \"quantity\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Check order status (wait 2-3s, expect PROCESSED)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/orders/order-001/status",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        },
+        {
+          "name": "4. Get inventory after order (item-1 should be reduced by 10)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8081/inventory",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "UC2 - Invalid Payload (Validation)",
+      "description": "Order request with missing or invalid fields should be rejected immediately with 400",
+      "item": [
+        {
+          "name": "1. Place order - empty orderId (expect 400)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"\",\n  \"itemId\": \"item-1\",\n  \"quantity\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Place order - negative quantity (expect 400)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-002\",\n  \"itemId\": \"item-1\",\n  \"quantity\": -1\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Place order - missing itemId (expect 400)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-002\",\n  \"itemId\": \"\",\n  \"quantity\": 10\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "UC3 - Insufficient Stock (Rejected Order)",
+      "description": "Order for item with no stock should be rejected by inventory service",
+      "item": [
+        {
+          "name": "1. Get inventory (item-3 has 0 stock)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8081/inventory",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        },
+        {
+          "name": "2. Place order - item-3 has no stock (expect 202)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-003\",\n  \"itemId\": \"item-3\",\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Check order status (wait 2-3s, expect REJECTED)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/orders/order-003/status",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "UC4 - Item Not Found (Rejected Order)",
+      "description": "Order for non-existing item should be rejected by inventory service",
+      "item": [
+        {
+          "name": "1. Place order - item-999 does not exist (expect 202)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-004\",\n  \"itemId\": \"item-999\",\n  \"quantity\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Check order status (wait 2-3s, expect REJECTED)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/orders/order-004/status",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "UC5 - Idempotency (Duplicate Order)",
+      "description": "Same orderId sent twice - first with valid params, then with different params",
+      "item": [
+        {
+          "name": "1. Place original order (expect 202)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-005\",\n  \"itemId\": \"item-2\",\n  \"quantity\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "2. Check order status (wait 2-3s, expect PROCESSED)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/orders/order-005/status",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        },
+        {
+          "name": "3. Resend same orderId - identical params (expect 409 - duplicate order)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-005\",\n  \"itemId\": \"item-2\",\n  \"quantity\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "4. Resend same orderId - different params (expect 409 - duplicate order)",
+          "request": {
+            "method": "POST",
+            "url": "http://localhost:8080/orders",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"order-005\",\n  \"itemId\": \"item-2\",\n  \"quantity\": 999\n}"
+            }
+          }
+        },
+        {
+          "name": "5. Check order status (expect PROCESSED - status unchanged)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/orders/order-005/status",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "UC6 - Order Not Found",
+      "description": "Checking status of non-existent order should return 404",
+      "item": [
+        {
+          "name": "1. Check status - non existent order (expect 404)",
+          "request": {
+            "method": "GET",
+            "url": "http://localhost:8080/orders/order-999/status",
+            "header": [{ "key": "Accept", "value": "application/json" }]
+          }
+        }
+      ]
+    }
+  ]
+}
