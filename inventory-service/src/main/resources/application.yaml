@@ -7,6 +7,10 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
+        acks: all
+        retries: 3
+        retry.backoff.ms: 1000
+        enable.idempotence: true
         spring.json.add.type.headers: true
     consumer:
       group-id: inventory-group

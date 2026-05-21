@@ -20,10 +20,15 @@ public class OrderResultProducer {
     private final KafkaTemplate<String, OrderResult> kafkaTemplate;
 
     public void send(String orderId, OrderStatus status, String message) {
-        OrderResult result = new OrderResult(orderId, status, message);
+        send(new OrderResult(orderId, status, message));
+    }
+
+    public void send(OrderResult result) {
+        String orderId = result.orderId();
         try {
-            kafkaTemplate.send(KafkaTopics.ORDER_RESULTS, orderId, result).get(5, TimeUnit.SECONDS);
-            log.info("Order result sent, orderId: {}, status: {}", orderId, status);
+            kafkaTemplate.send(KafkaTopics.ORDER_RESULTS, orderId, result)
+                    .get(5, TimeUnit.SECONDS);
+            log.info("Order result sent, orderId: {}, status: {}", orderId, result.status());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Interrupted while sending order result, orderId: {}", orderId, e);

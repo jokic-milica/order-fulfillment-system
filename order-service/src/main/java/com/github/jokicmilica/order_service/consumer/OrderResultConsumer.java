@@ -15,7 +15,7 @@ public class OrderResultConsumer {
 
     private final OrderStatusService orderStatusService;
 
-    @KafkaListener(topics = KafkaTopics.ORDER_RESULTS, groupId = "order-service-group")
+    @KafkaListener(topics = KafkaTopics.ORDER_RESULTS, groupId = "${spring.kafka.consumer.group-id}")
     public void consume(OrderResult result) {
         log.info("Received order result for orderId: {}, status: {}", result.orderId(), result.status());
         orderStatusService.updateOrderResult(result);
