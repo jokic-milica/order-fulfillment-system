@@ -136,8 +136,6 @@ docker-compose up --build
 
 | Service | URL |
 |---|---|
-| Order Service | http://localhost:8080 |
-| Inventory Service | http://localhost:8081 |
 | Order Service Swagger | http://localhost:8080/swagger-ui.html |
 | Inventory Service Swagger | http://localhost:8081/swagger-ui.html |
 | Order Service Health | http://localhost:8080/actuator/health |
