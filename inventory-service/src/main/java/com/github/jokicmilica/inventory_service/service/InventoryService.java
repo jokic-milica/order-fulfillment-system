@@ -1,95 +1,81 @@
 package com.github.jokicmilica.inventory_service.service;
 
 import com.github.jokicmilica.inventory_service.constants.InventoryConstants;
+import com.github.jokicmilica.inventory_service.model.InventoryItem;
+import com.github.jokicmilica.inventory_service.model.OutboxEntry;
+import com.github.jokicmilica.inventory_service.model.OutboxStatus;
+import com.github.jokicmilica.inventory_service.repository.InventoryRepository;
+import com.github.jokicmilica.inventory_service.repository.OutboxRepository;
 import com.github.jokicmilica.model.OrderEvent;
 import com.github.jokicmilica.model.OrderResult;
 import com.github.jokicmilica.model.OrderStatus;
 import jakarta.annotation.PostConstruct;
+import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class InventoryService {
 
-    private final Map<String, Integer> inventory = new ConcurrentHashMap<>();
-    private final Map<String, OrderEvent> processedOrders = new ConcurrentHashMap<>();
-    private final Map<String, OrderResult> orderResults = new ConcurrentHashMap<>();
+    private final InventoryRepository inventoryRepository;
+    private final OutboxRepository outboxRepository;
 
-    @PostConstruct
-    public void initializeInventory() {
-        inventory.put("item-1", InventoryConstants.DEFAULT_ITEM_1_STOCK);
-        inventory.put("item-2", InventoryConstants.DEFAULT_ITEM_2_STOCK);
-        inventory.put("item-3", InventoryConstants.DEFAULT_ITEM_3_STOCK);
-        log.info("Inventory initialized: {}", inventory);
+    @Transactional
+    public OrderResult processOrder(OrderEvent event) {
+        Optional<OutboxEntry> existing = outboxRepository.findByOrderId(event.orderId());
+        if (existing.isPresent()) {
+            log.info("Duplicate event received, reusing existing result for orderId: {}", event.orderId());
+            return existing.get().getPayload();
+        }
+        OrderResult orderRes = tryReserve(event);
+        OutboxEntry outboxEntry = new OutboxEntry(event.orderId(), orderRes, OutboxStatus.PENDING, LocalDateTime.now());
+        outboxRepository.save(outboxEntry);
+        return orderRes;
+
     }
 
-    public synchronized OrderResult processOrder(OrderEvent event) {
-        String orderId = event.orderId();
-        OrderEvent previousEvent = processedOrders.get(orderId);
-
-        if (previousEvent != null) {
-            if (!previousEvent.equals(event)) {
-                log.warn("Order ID reused with different parameters, orderId: {}", orderId);
-                return new OrderResult(orderId, OrderStatus.REJECTED,
-                        "Order ID already used with different parameters");
-            }
-
-            OrderResult existingResult = orderResults.get(orderId);
-            if (existingResult != null) {
-                log.info("Duplicate event received, reusing existing result for orderId: {}", orderId);
-                return existingResult;
-            }
-
-            throw new IllegalStateException(String.format("Missing cached result for already processed orderId: %s", orderId));
-        }
-
+    private OrderResult tryReserve(OrderEvent event) {
+        InventoryItem inventoryItem = inventoryRepository.findById(event.itemId()).orElse(null);
         OrderResult computedResult;
-
-        if (!inventory.containsKey(event.itemId())) {
+        if (inventoryItem==null) {
             log.warn("Item not found: {}", event.itemId());
-            computedResult = new OrderResult(orderId, OrderStatus.REJECTED,
+            computedResult = new OrderResult(event.orderId(), OrderStatus.REJECTED,
                     String.format("Item not found: %s", event.itemId()));
-        } else {
-            boolean reserved = tryReserve(event.itemId(), event.quantity());
-            if (reserved) {
-                log.info("Order processed, orderId: {}, itemId: {}, remaining stock: {}",
-                        orderId, event.itemId(), inventory.get(event.itemId()));
-                computedResult = new OrderResult(orderId, OrderStatus.PROCESSED,
-                        String.format("Order with id %s successfully processed, stock reserved", orderId));
-            } else {
-                Integer available = inventory.get(event.itemId());
-                int availableStock = available == null ? 0 : available;
-                log.warn("Insufficient stock, orderId: {}, itemId: {}, requested: {}, available: {}",
-                        orderId, event.itemId(), event.quantity(), availableStock);
-                computedResult = new OrderResult(orderId, OrderStatus.REJECTED,
+            return computedResult;
+        }
+        if (inventoryItem.getAvailableQuantity()>=event.quantity()) {
+            inventoryItem.setAvailableQuantity(inventoryItem.getAvailableQuantity()-event.quantity());
+            inventoryRepository.save(inventoryItem);
+            log.info("Order processed, orderId: {}, itemId: {}, remaining stock: {}",
+                        event.orderId(), event.itemId(), inventoryItem.getAvailableQuantity());
+            computedResult = new OrderResult(event.orderId(), OrderStatus.PROCESSED,
+                        String.format("Order with id %s successfully processed, stock reserved", event.orderId()));
+            return computedResult;
+        }
+        int availableStock = inventoryItem.getAvailableQuantity();
+        log.warn("Insufficient stock, orderId: {}, itemId: {}, requested: {}, available: {}",
+                        event.orderId(), event.itemId(), event.quantity(), availableStock);
+        computedResult = new OrderResult(event.orderId(), OrderStatus.REJECTED,
                         String.format("Insufficient stock for itemId: %s, requested: %d, available: %d",
                                 event.itemId(), event.quantity(), availableStock));
-            }
-        }
-
-        processedOrders.put(orderId, event);
-        orderResults.put(orderId, computedResult);
         return computedResult;
     }
 
-    private boolean tryReserve(String itemId, int quantity) {
-        var result = new boolean[]{false};
-        inventory.compute(itemId, (key, current) -> {
-            if (current != null && current >= quantity) {
-                result[0] = true;
-                return current - quantity;
-            }
-            return current;
-        });
-        return result[0];
-    }
 
-    public Map<String, Integer> getInventory() {
-        return Collections.unmodifiableMap(inventory);
+    public List<InventoryItem> getInventory() {
+        return inventoryRepository.findAll();
     }
 }

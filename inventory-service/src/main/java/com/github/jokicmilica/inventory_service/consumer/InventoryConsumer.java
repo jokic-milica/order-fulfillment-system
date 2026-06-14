@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 
@@ -27,10 +28,10 @@ public class InventoryConsumer {
             backoff = @Backoff(delay = 1000, multiplier = 2)
     )
     @KafkaListener(topics = KafkaTopics.ORDERS, groupId = "${spring.kafka.consumer.group-id}")
-    public void consume(OrderEvent event) {
+    public void consume(OrderEvent event, Acknowledgment ack) {
         log.info("Received order event for orderId: {}", event.orderId());
         OrderResult result = inventoryService.processOrder(event);
-        orderResultProducer.send(result);
+        ack.acknowledge();
     }
 
     @DltHandler
