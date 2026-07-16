@@ -1,6 +1,6 @@
 # Order Fulfillment System
 
-A small event-driven system, consisting of two independent microservices communicating via Apache Kafka.
+A small event-driven demo system composed of Java Spring Boot microservices that communicate through Apache Kafka. The current implementation focuses on reliability patterns such as idempotency, retry handling, and the outbox pattern.
 
 ---
 
@@ -11,6 +11,7 @@ A small event-driven system, consisting of two independent microservices communi
 | Language | Java 21 |
 | Framework | Spring Boot 3.5.1 |
 | Message Broker | Apache Kafka |
+| Persistence | MongoDB |
 | Containerization | Docker + Docker Compose |
 | API Documentation | Springdoc OpenAPI (Swagger UI) |
 | Build Tool | Maven (multi-module) |
@@ -19,7 +20,7 @@ A small event-driven system, consisting of two independent microservices communi
 
 ## Architecture
 
-```
+```text
 Client
   │
   ▼
@@ -27,7 +28,7 @@ POST /orders
   │
   ▼
 ┌─────────────────┐        topic: orders         ┌──────────────────────┐
-│   Order Service  │ ──────────────────────────► │  Inventory Service   │
+│   Order Service │ ──────────────────────────► │  Inventory Service   │
 │   (port 8080)   │                              │   (port 8081)        │
 │                 │        topic: order-results  │                      │
 │                 │ ◄────────────────────────── │                      │
@@ -37,85 +38,69 @@ POST /orders
 GET /orders/{orderId}/status
 ```
 
-### Flow
+### Main Flow
 
-1. Client sends `POST /orders` to Order Service
-2. Order Service validates the request and publishes an `OrderEvent` to the `orders` Kafka topic
-3. Inventory Service consumes the event, checks stock availability and publishes an `OrderResult` to the `order-results` topic
-4. Order Service consumes the result and updates the order status in memory
-5. Client polls `GET /orders/{orderId}/status` to get the final status
+1. The client sends a request to the Order Service.
+2. The Order Service validates the payload and publishes an `OrderEvent` to the `orders` Kafka topic.
+3. The Inventory Service consumes the event, evaluates stock availability, and produces an `OrderResult`.
+4. The Inventory Service persists the result through an outbox mechanism and publishes it asynchronously.
+5. The Order Service consumes the result and updates the order state for the client to query.
 
 ---
 
-## Services
+## Key Features
 
-### Order Service (port 8080)
+### Order Service
 
-- `POST /orders` validates and publishes order event to Kafka
-- `GET /orders/{orderId}/status` returns current order processing status and processing message/reason
-- Idempotency check using `ConcurrentHashMap.putIfAbsent()` (atomic, race-condition safe)
-- Rollback on Kafka publish failure, order ID is released so the client can retry
-- Consumes `order-results` topic to track inventory processing outcomes
+- Accepts `POST /orders` and publishes order events to Kafka.
+- Exposes `GET /orders/{orderId}/status` for status lookup.
+- Uses an idempotency guard to prevent duplicate order submission handling.
+- Consumes `order-results` and updates the order outcome.
 
-### Inventory Service (port 8081)
+### Inventory Service
 
-- Consumes `orders` topic and processes incoming order events
-- In-memory inventory initialized at startup (`ConcurrentHashMap`)
-- Atomic stock reservation using `compute()` (thread-safe without explicit locking)
-- Idempotency check, detects and handles duplicate events
-- Caches computed `OrderResult` by `orderId` and reuses it on duplicate/retried events (prevents double reservation)
-- Retry mechanism with exponential backoff (`@RetryableTopic`, 3 attempts)
-- Dead Letter Topic (`orders-dlt`) for events that fail all retry attempts
-- Publishes `OrderResult` with status `PROCESSED`, `REJECTED`, or `FAILED`
-- `GET /inventory` returns current stock levels
+- Consumes `orders` from Kafka.
+- Persists inventory state in MongoDB.
+- Stores outbox entries in MongoDB before publishing results.
+- Uses an outbox scheduling mechanism to publish pending results reliably.
+- Detects duplicate events and reuses the existing result for the same order ID.
+- Supports retry handling with exponential backoff and dead-letter handling.
+- Publishes `OrderResult` with `PROCESSED`, `REJECTED`, or `FAILED` status.
+- Exposes `GET /inventory` to inspect stock levels.
 
 ### Common Module
 
 Shared library containing:
-- `OrderEvent` - event published by Order Service
-- `OrderResult` - result published by Inventory Service
+- `OrderEvent` - event published by the Order Service
+- `OrderResult` - result emitted by the Inventory Service
 - `OrderStatus` - enum (`PENDING`, `PROCESSED`, `REJECTED`, `FAILED`)
-- `KafkaTopics` - topic name constants
+- `KafkaTopics` - topic constants
 - Shared Kafka configuration
 
 ---
 
 ## Kafka Infrastructure
 
-| Topic | Partitions | Replicas | Purpose |
-|---|---|---|---|
-| `orders` | 3 | 1 | Order events from Order Service |
-| `order-results` | 3 | 1 | Processing results from Inventory Service |
-| `orders-dlt` | auto | 1 | Dead letter topic for failed events |
+| Topic | Purpose |
+|---|---|
+| `orders` | Order events from Order Service |
+| `order-results` | Processing results from Inventory Service |
+| `orders-dlt` | Dead-letter topic for failed events |
 
-- `orderId` is used as partition key to guarantee ordering per order
-- Producer idempotence enabled (`enable.idempotence=true`, `acks=all`)
-- JSON serialization/deserialization via Spring Kafka `JsonSerializer`
-
----
-
-## Assumptions & Design Decisions
-
-- **In-memory state**: inventory and order status are stored in memory. Data is lost on service restart. In production, a persistent store (e.g. database or Redis) would be used.
-- **Single Kafka broker**: replication factor is set to 1. In production, a multi-broker cluster with higher replication would be required.
-- **Synchronous Kafka publishing**: both producers use .get(5, TimeUnit.SECONDS) to wait for broker acknowledgment before returning a response to the caller. This is an intentional trade-off: since in-memory state already limits horizontal scaling, consistency and delivery guarantee were prioritized over throughput. In a high-throughput production system, async publishing with callbacks would be preferable.
-- **No authentication**: authentication and authorization are intentionally omitted. In production, the system would integrate with an existing IAM solution (e.g. via API Gateway with JWT validation).
-- **orderId is client-generated**: the client is responsible for generating a unique `orderId` per order. Sending the same `orderId` twice is treated as a duplicate and returns `409 Conflict`.
-- **Async communication**: `POST /orders` returns `202 Accepted` immediately. The client must poll `GET /orders/{orderId}/status` to get the final result. In production, webhook or WebSocket notifications could be added for real-time updates.
-- **itemId is a String**: in production, `itemId` would be a `UUID` or `Long` generated by a catalog service.
-- **Insufficient stock is non-retryable**: stock shortage is a business decision, not a technical failure. The event is not retried and goes directly to `REJECTED` status.
-- **Failure model for Kafka integration**: delivery is handled as at-least-once. If publishing `OrderResult` fails, the listener throws and Kafka retry/DLT takes over. Reprocessing the same `orderId` reuses cached outcome and does not reserve stock again.
-- **Duplicate semantics**: same `orderId` + same payload is treated as idempotent replay and returns the same cached outcome; same `orderId` + different payload is rejected (`REJECTED`) as invalid reuse.
-- **Additional consumers**: the architecture supports adding new consumers (e.g. Notifications, Billing, Analytics) to the `orders` topic without modifying Order Service.
+- `orderId` is used as the partition key to preserve ordering per order.
+- Producer idempotence is enabled (`enable.idempotence=true`, `acks=all`).
+- JSON serialization/deserialization is handled through Spring Kafka.
 
 ---
 
-## Known Limitations
+## Reliability Patterns
 
-- Restarting either service resets all in-memory state (inventory levels, order statuses, idempotency sets)
-- The system is eventually consistent, not strictly transactional
-- Single Kafka broker (no high availability)
-- No distributed idempotency (idempotency sets are local to each service instance; horizontal scaling would require a shared persistent store)
+The project demonstrates several distributed-systems design choices:
+
+- **Outbox pattern**: the inventory service records an outbound event in MongoDB before publishing it to Kafka.
+- **Idempotency**: duplicate events reuse the same processing result for an order instead of re-reserving inventory.
+- **Manual acknowledgements**: Kafka consumption uses manual acknowledgement to avoid committing offsets too early.
+- **Retry and DLT handling**: failures go through retry logic and can be routed to the dead-letter topic.
 
 ---
 
@@ -147,56 +132,22 @@ docker-compose up --build
 docker-compose down
 ```
 
-> **Important:** Restart the system between full test runs to reset in-memory state.
-> ```bash
-> docker-compose down && docker-compose up --build
-> ```
-
 ---
 
 ## Testing
 
-Three options are available:
-
-### Option 1: Swagger UI (no setup required)
+### Swagger UI
 
 - Order Service: http://localhost:8080/swagger-ui.html
 - Inventory Service: http://localhost:8081/swagger-ui.html
 
-Start by calling `GET /inventory` on Inventory Service to see available stock, then use Order Service endpoints.
+### Postman Collection
 
-### Option 2: Postman Collection
+Import [postman/order-fulfillment-system.json](postman/order-fulfillment-system.json) into Postman.
 
-Import `postman/order-fulfillment-system.json` into Postman via **File → Import**.
+### HTTP Test File
 
-The collection is organized by use cases and can be run manually (request by request) or automatically via **Run Collection**.
-
-### Option 3: HTTP Test File (IntelliJ Ultimate required)
-
-Open `http/api-tests.http` in IntelliJ IDEA and run requests individually using the green arrow next to each request.
-
----
-
-## Use Cases
-
-| # | Use Case | Expected Outcome |
-|---|---|---|
-| UC1 | Happy path — sufficient stock | `202` → status `PROCESSED`, inventory reduced |
-| UC2 | Invalid payload | `400` immediately, not published to Kafka |
-| UC3 | Insufficient stock | `202` → status `REJECTED` |
-| UC4 | Item not found | `202` → status `REJECTED` |
-| UC5 | Duplicate orderId | `409 Conflict` — blocked by Order Service |
-| UC6 | Order not found | `404` — orderId never submitted |
-
-### Manual test: Kafka unavailable (503)
-
-To test the `503 Service Unavailable` response:
-
-```bash
-docker-compose stop kafka
-# POST /orders → expect 503
-docker-compose start kafka
-```
+Open [http/api-tests.http](http/api-tests.http) in IntelliJ IDEA and run the requests individually.
 
 ---
 
@@ -208,8 +159,10 @@ The system starts with the following stock levels:
 |---|---|
 | `item-1` | 100 |
 | `item-2` | 50 |
-| `item-3` | 0 (intentionally empty for testing) |
+| `item-3` | 0 |
 
-## Tests
+---
 
-A single unit test is included  `OrderStatusServiceTest`  which deliberately simulates a race condition by sending 10 concurrent requests with the same `orderId`. The test verifies that exactly one request succeeds and the remaining nine are rejected, confirming that `ConcurrentHashMap.putIfAbsent()` provides atomic, lock-free idempotency guarantees.
+## Notes
+
+This demo is intentionally focused on the event-driven architecture and reliability patterns rather than full production-hardening. In a production environment, you would typically add stronger observability, authentication, and more durable state management beyond the current demo scope.
